@@ -1,0 +1,58 @@
+from aws_cdk import core
+from aws_cdk.aws_ecr import Repository
+from aws_cdk.aws_codebuild import Project
+from aws_cdk.aws_codecommit import Repository as CodeCommitRepo
+from aws_cdk.aws_codepipeline import Pipeline, CodePipelineSource, ShellStep
+
+class ServerlessBatchJobStack(core.Stack):
+
+    def __init__(self, scope: core.Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        # ECR Repository
+        ecr_repo = Repository(self, "EcrRepo")
+
+        # CodeCommit Repository
+        codecommit_repo = CodeCommitRepo(self, "CodeCommitRepo")
+
+        # CodeBuild Project
+        codebuild_project = Project(self, "CodeBuildProject",
+                                    repository=codecommit_repo,
+                                    build_spec=ShellStep(
+                                        input=".",
+                                        commands=[
+                                            "docker build -t image-name:latest .",
+                                            "docker push ecr-repo-uri:latest image-name:latest"
+                                        ]
+                                    )
+        )
+
+        # Pipeline
+        pipeline = Pipeline(self, "Pipeline",
+                            synth=ShellStep(
+                                input=codecommit_repo,
+                                commands=[
+                                    "cd build",  # Change directory to the build folder in the CodeCommit repo
+                                    "pip install aws-cdk aws-codepipeline aws-codecommit aws-iam -t .aws-cdk"  # Install required dependencies
+                                    "cdk synth > cdk.out"  # Synth the CDK code
+                                ]
+                            )
+        )
+
+        # Pipeline Source Stage
+        pipeline.add_stage(CodePipelineSource(
+            source_artifact=codebuild_project.artifact,
+            branch="master"
+        ))
+
+        # Pipeline Build Stage
+        pipeline.add_stage(codebuild_project)
+
+        # Grant CodeBuild Project permission to push to ECR Repo
+        ecr_repo.grant_pull_push_access(codebuild_project)
+
+        # Replace ECR repo and URL Name
+        codebuild_project.build_spec.override_environment_variables({
+            "ecr-repo-uri": ecr_repo.repository_uri,
+            "image-name": ecr_repo.repository_name
+        })

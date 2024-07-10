@@ -1,0 +1,63 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                script {
+                    git branch: 'main', credentialsId: 'git credentials', url: 'Git URL'
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn clean install' 
+            }
+        }
+        stage('Dev') {
+            steps {
+                sh 'mvn deploy -Dmaven.deploy.environment=dev'
+                input {
+                    id 'DEV_APPROVAL'
+                    message 'Ready to deploy to Dev?'
+                    ok 'Deploy'
+                    cancel 'Cancel'
+                }
+            }
+        }
+        stage('QA') {
+            steps {
+                sh 'mvn deploy -Dmaven.deploy.environment=qa'
+                input {
+                    id 'QA_APPROVAL'
+                    message 'Ready to deploy to QA? '
+                    ok 'Deploy'
+                    cancel 'Cancel'
+                }
+            }
+        }
+        stage('UAT') {
+            steps {
+                sh 'mvn deploy -Dmaven.deploy.environment=uat'
+                input {
+                    id 'UAT_APPROVAL'
+                    message 'Ready to deploy to UAT? '
+                    ok 'Deploy'
+                    cancel 'Cancel'
+                }
+            }
+        }
+        stage('Prod ') {
+            steps {
+                sh 'mvn deploy -Dmaven.deploy.environment=prod'
+                input {
+                    id 'PROD_APPROVAL'
+                    message 'Ready to deploy to Production? '
+                    ok 'Deploy'
+                    cancel 'Cancel'
+                }
+            }
+        }
+    }
+
+ 
